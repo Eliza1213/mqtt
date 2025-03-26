@@ -1,7 +1,7 @@
 // backend/routes/TerrarioRoutes.js
 const express = require("express");
 const router = express.Router();
-const TerrarioData = require("../Models/TerrarioData");
+const TerrarioData = require("../models/TerrarioData");
 const mqttService = require("../Services/MqttService");
 
 // Inicializar el servicio MQTT al cargar las rutas
