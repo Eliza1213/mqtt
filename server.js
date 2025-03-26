@@ -15,6 +15,11 @@ app.use(cors());
 // Conectar a la base de datos
 conectarDB();
 
+// Ruta principal
+app.get("/", (req, res) => {
+  res.send("Bienvenido al backend de Terrario API.");
+});
+
 // Rutas API existentes
 app.use("/api/usuarios", require("./routes/userRoutes"));
 app.use("/api/misiones", require("./routes/MisionRoutes"));
