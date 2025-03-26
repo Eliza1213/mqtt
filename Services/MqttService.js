@@ -23,17 +23,12 @@ const MQTT_CONFIG = {
 
 // Tópicos MQTT
 const MQTT_TOPICS = {
-  // Sensores
   temperature: 'tortuterra/sensor/temperature',
   foodLevel: 'tortuterra/sensor/foodlevel',
   motion: 'tortuterra/sensor/motion',
-  
-  // Actuadores (estado)
   fanState: 'tortuterra/fan/state',
   lampState: 'tortuterra/lamp/state',
   foodState: 'tortuterra/food/state',
-  
-  // Actuadores (control)
   fanControl: 'tortuterra/fan/control',
   lampControl: 'tortuterra/lamp/control',
   foodControl: 'tortuterra/food/control'
@@ -45,12 +40,11 @@ let connectionStatus = false;
 
 // Inicializar el servicio MQTT
 const initMqttService = () => {
-  if (mqttClient) return; // Ya está inicializado
-  
+  if (mqttClient) return;
+
   console.log('Iniciando servicio MQTT...');
   
   try {
-    // Conectamos al broker MQTT
     mqttClient = mqtt.connect({
       protocol: 'mqtt',
       host: MQTT_CONFIG.host,
@@ -61,12 +55,11 @@ const initMqttService = () => {
       reconnectPeriod: 5000
     });
     
-    // Manejo de eventos de conexión
+    // Eventos MQTT
     mqttClient.on('connect', () => {
       console.log('✅ Conectado al broker MQTT');
       connectionStatus = true;
       
-      // Suscripción a los tópicos de estado
       mqttClient.subscribe([
         MQTT_TOPICS.temperature,
         MQTT_TOPICS.foodLevel,
@@ -76,20 +69,19 @@ const initMqttService = () => {
         MQTT_TOPICS.foodState
       ], (err) => {
         if (err) {
-          console.error('❌ Error al suscribirse a los tópicos:', err);
+          console.error(`❌ Error al suscribirse: ${err.message}`);
         } else {
-          console.log('✅ Suscrito a los tópicos de estado');
+          console.log('✅ Suscripciones activas:', Object.values(MQTT_TOPICS).join(', '));
         }
       });
     });
-    
-    // Manejo de mensajes recibidos
+
+    // LÍNEA 88 CORREGIDA (usando template strings)
     mqttClient.on('message', (topic, message) => {
       const value = message.toString();
-      console.log('Mensaje recibido en ' + topic + ': ' + value);
+      console.log(`Mensaje recibido en ${topic}: ${value}`);
       
       try {
-        // Actualizar el estado según el tópico
         if (topic === MQTT_TOPICS.temperature) {
           currentTerrarioState.temperature = parseFloat(value);
         } else if (topic === MQTT_TOPICS.foodLevel) {
@@ -102,91 +94,69 @@ const initMqttService = () => {
           currentTerrarioState.lampState = value === 'on';
         }
       } catch (error) {
-        console.error('Error al procesar mensaje MQTT:', error);
+        console.error(`Error procesando mensaje: ${error.message}`);
       }
     });
-    
-    // Manejo de errores
+
     mqttClient.on('error', (err) => {
-      console.error('Error en conexión MQTT:', err);
+      console.error(`Error MQTT: ${err.message}`);
       connectionStatus = false;
     });
-    
-    // Reconexión
+
     mqttClient.on('reconnect', () => {
-      console.log('Intentando reconectar a MQTT...');
+      console.log('🔄 Intentando reconexión MQTT...');
       connectionStatus = false;
     });
-    
-    // Desconexión
+
     mqttClient.on('close', () => {
-      console.log('Conexión MQTT cerrada');
+      console.log('🔌 Conexión MQTT cerrada');
       connectionStatus = false;
     });
+
   } catch (error) {
-    console.error('Error al inicializar el servicio MQTT:', error);
+    console.error(`Error inicializando MQTT: ${error.message}`);
     connectionStatus = false;
   }
 };
 
-// Controlar un actuador
+// Controlar actuadores
 const controlActuator = (actuador, accion) => {
-  if (!mqttClient) {
-    initMqttService(); // Intentar iniciar si no está inicializado
-  }
+  if (!mqttClient) initMqttService();
   
   if (!connectionStatus) {
-    console.error('❌ Cliente MQTT no conectado');
-    throw new Error('Cliente MQTT no conectado');
+    throw new Error('🚫 Conexión MQTT no disponible');
   }
-  
-  let topic = '';
-  let message = '';
-  
-  // Seleccionar el tópico y mensaje según el actuador y la acción
-  if (actuador === 'fan') {
-    topic = MQTT_TOPICS.fanControl;
-    message = accion;
-  } else if (actuador === 'lamp') {
-    topic = MQTT_TOPICS.lampControl;
-    message = accion;
-  } else if (actuador === 'dispense') {
-    topic = MQTT_TOPICS.foodControl;
-    message = 'dispense';
-  } else {
-    throw new Error('Actuador no soportado: ' + actuador);
-  }
-  
-  // Publicar el mensaje
-  console.log('Enviando comando: ' + topic + ' - ' + message);
+
+  const commandMap = {
+    fan: MQTT_TOPICS.fanControl,
+    lamp: MQTT_TOPICS.lampControl,
+    dispense: MQTT_TOPICS.foodControl
+  };
+
+  const topic = commandMap[actuador];
+  if (!topic) throw new Error(`🚫 Actuador no soportado: ${actuador}`);
+
+  const message = actuador === 'dispense' ? 'dispense' : accion;
+  console.log(`📤 Enviando: ${topic} -> ${message}`);
+
   mqttClient.publish(topic, message, { qos: 1 }, (err) => {
-    if (err) {
-      console.error('❌ Error al enviar comando ' + actuador + '/' + accion + ':', err);
-      throw err;
-    } else {
-      console.log('✅ Comando enviado: ' + topic + ' - ' + message);
-    }
+    if (err) throw new Error(`❌ Fallo al enviar: ${err.message}`);
+    console.log(`📩 Comando enviado: ${topic}/${message}`);
   });
-  
+
   return true;
 };
 
-// Obtener el estado actual del terrario
-const getTerrarioStatus = () => {
-  return {
-    ...currentTerrarioState,
-    connected: connectionStatus
-  };
-};
-
-// Verificar la conexión MQTT
-const isConnected = () => {
-  return connectionStatus;
-};
+// Estado del terrario
+const getTerrarioStatus = () => ({
+  ...currentTerrarioState,
+  connected: connectionStatus,
+  lastUpdate: new Date().toISOString()
+});
 
 module.exports = {
   initMqttService,
   controlActuator,
   getTerrarioStatus,
-  isConnected
+  isConnected: () => connectionStatus
 };
